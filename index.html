@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Smart Expense Tracker  💰</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body {
+  font-family: 'Segoe UI', sans-serif;
+  background: linear-gradient(to right, #141e30, #243b55);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  color: white;
+}
+
+.container {
+  background: rgba(255,255,255,0.08);
+  padding: 25px;
+  border-radius: 20px;
+  width: 500px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 0 30px rgba(0,0,0,0.5);
+  max-height: 95vh;
+  overflow-y: auto;
+}
+
+h2 {
+  text-align: center;
+}
+
+input, select {
+  width: 100%;
+  padding: 8px;
+  margin-top: 8px;
+  border-radius: 8px;
+  border: none;
+}
+
+button {
+  margin-top: 10px;
+  width: 100%;
+  padding: 8px;
+  border-radius: 8px;
+  border: none;
+  font-weight: bold;
+  cursor: pointer;
+  background: #00c6ff;
+  color: black;
+}
+
+.section {
+  margin-top: 15px;
+}
+
+.expense-day {
+  background: rgba(255,255,255,0.1);
+  padding: 10px;
+  border-radius: 10px;
+  margin-top: 10px;
+}
+
+#dialogue {
+  margin-top: 10px;
+  font-style: italic;
+}
+
+canvas {
+  margin-top: 20px;
+  background: white;
+  border-radius: 10px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+  <h2>💰 Expense Tracker </h2>
+
+  <input type="number" id="amount" placeholder="Enter amount (₹)">
+  
+  <select id="category">
+    <option value="Food">Food</option>
+    <option value="Travel">Travel</option>
+    <option value="Shopping">Shopping</option>
+    <option value="Other">Other</option>
+  </select>
+
+  <input type="date" id="date">
+
+  <button onclick="addExpense()">Add Expense</button>
+  <button onclick="calculateWeekly()">Weekly Analysis (Text)</button>
+  <button onclick="showWeeklyGraph()">📊 Show Weekly Graph</button>
+  <button onclick="clearAll()">🗑 Clear All Data</button>
+  <button onclick="summarizeExpenses()">📋 Summarize</button>
+
+  <div id="expensesContainer" class="section"></div>
+  <div id="dialogue"></div>
+  <canvas id="weeklyChart"></canvas>
+
+</div>
+
+<script>
+let expenses = JSON.parse(localStorage.getItem("expenses")) || [];
+let chartInstance = null;
+
+function saveData() {
+  localStorage.setItem("expenses", JSON.stringify(expenses));
+}
+
+function addExpense() {
+  let amount = parseFloat(document.getElementById("amount").value);
+  let category = document.getElementById("category").value;
+  let date = document.getElementById("date").value;
+
+  if (!amount || !date) return;
+
+  expenses.push({ amount, category, date });
+  saveData();
+  renderExpenses();
+
+  document.getElementById("amount").value = "";
+}
+
+function renderExpenses() {
+  let container = document.getElementById("expensesContainer");
+  container.innerHTML = "";
+
+  let grouped = {};
+
+  expenses.forEach(exp => {
+    if (!grouped[exp.date]) grouped[exp.date] = [];
+    grouped[exp.date].push(exp);
+  });
+
+  for (let day in grouped) {
+    let dayDiv = document.createElement("div");
+    dayDiv.className = "expense-day";
+
+    let total = grouped[day].reduce((sum, e) => sum + e.amount, 0);
+
+    dayDiv.innerHTML = `<strong>${day}</strong><br>
+    Total: ₹${total}<br>`;
+
+    grouped[day].forEach(e => {
+      dayDiv.innerHTML += `• ₹${e.amount} - ${e.category}<br>`;
+    });
+
+    container.appendChild(dayDiv);
+  }
+}
+
+function calculateWeekly() {
+  let now = new Date();
+  let weekAgo = new Date();
+  weekAgo.setDate(now.getDate() - 7);
+
+  let weeklyExpenses = expenses.filter(e => new Date(e.date) >= weekAgo);
+  let total = weeklyExpenses.reduce((sum, e) => sum + e.amount, 0);
+
+  let dialogue = document.getElementById("dialogue");
+
+  dialogue.innerHTML = `Weekly Spending: ₹${total}<br>`;
+
+  if (total < 1000) {
+    dialogue.innerHTML += "😎 Excellent budget control this week!";
+  } else if (total < 3000) {
+    dialogue.innerHTML += "🙂 Balanced spending. Keep tracking!";
+  } else {
+    dialogue.innerHTML += "⚠️ High weekly spending. Review your expenses.";
+  }
+}
+
+function showWeeklyGraph() {
+  let now = new Date();
+  let weekAgo = new Date();
+  weekAgo.setDate(now.getDate() - 6);
+
+  let dailyTotals = {};
+
+  for (let i = 0; i < 7; i++) {
+    let d = new Date(weekAgo);
+    d.setDate(weekAgo.getDate() + i);
+    let key = d.toISOString().split("T")[0];
+    dailyTotals[key] = 0;
+  }
+
+  expenses.forEach(e => {
+    if (new Date(e.date) >= weekAgo) {
+      if (dailyTotals[e.date] !== undefined) {
+        dailyTotals[e.date] += e.amount;
+      }
+    }
+  });
+
+  let labels = Object.keys(dailyTotals);
+  let data = Object.values(dailyTotals);
+
+  let ctx = document.getElementById("weeklyChart").getContext("2d");
+
+  if (chartInstance) {
+    chartInstance.destroy();
+  }
+
+  chartInstance = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: labels,
+      datasets: [{
+        label: "Weekly Spending (₹)",
+        data: data
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: true }
+      }
+    }
+  });
+}
+
+function clearAll() {
+  if (confirm("Are you sure you want to clear all data?")) {
+    expenses = [];
+    saveData();
+    renderExpenses();
+    document.getElementById("dialogue").innerHTML = "";
+    if (chartInstance) chartInstance.destroy();
+  }
+}
+
+renderExpenses();
+function summarizeExpenses() {
+  if (expenses.length === 0) {
+    document.getElementById("dialogue").innerHTML =
+      "⚠️ No expenses recorded yet!";
+    return;
+  }
+
+  let total = expenses.reduce((sum, e) => sum + e.amount, 0);
+
+  let uniqueDates = [...new Set(expenses.map(e => e.date))];
+  let avgPerDay = (total / uniqueDates.length).toFixed(2);
+
+  // Find highest spending day
+  let dayTotals = {};
+  expenses.forEach(e => {
+    if (!dayTotals[e.date]) dayTotals[e.date] = 0;
+    dayTotals[e.date] += e.amount;
+  });
+
+  let highestDay = Object.keys(dayTotals).reduce((a, b) =>
+    dayTotals[a] > dayTotals[b] ? a : b
+  );
+
+  // Category totals
+  let categoryTotals = {};
+  expenses.forEach(e => {
+    if (!categoryTotals[e.category]) categoryTotals[e.category] = 0;
+    categoryTotals[e.category] += e.amount;
+  });
+
+  let topCategory = Object.keys(categoryTotals).reduce((a, b) =>
+    categoryTotals[a] > categoryTotals[b] ? a : b
+  );
+
+  let message = `
+  📊 <b>Summary Report</b><br><br>
+  💰 Total Spending: ₹${total}<br>
+  📅 Average Per Day: ₹${avgPerDay}<br>
+  🔥 Highest Spending Day: ${highestDay}<br>
+  🏷 Most Spent Category: ${topCategory}<br><br>
+  `;
+
+  // Smart warnings
+  if (total > 5000) {
+    message += "🚨 Warning: You are overspending! Time to control expenses!";
+  } else if (total > 2000) {
+    message += "⚠️ Moderate spending detected. Stay mindful.";
+  } else {
+    message += "😎 Great job! Your spending is well managed.";
+  }
+
+  if (categoryTotals["Shopping"] > total * 0.4) {
+    message += "<br>🛍 Shopping seems high. Consider reducing impulse buys.";
+  }
+
+  document.getElementById("dialogue").innerHTML = message;
+}
+</script>
+
+</body>
+</html>
